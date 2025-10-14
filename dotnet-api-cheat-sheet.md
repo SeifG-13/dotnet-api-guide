@@ -14,8 +14,11 @@
 11. [Troubleshooting](#11-troubleshooting-common-issues)
 12. [Quick Reference](#12-quick-reference-card)
 13. [Project Structure](#13-project-structure-example)
-14. **[JWT Authentication Setup](#14-jwt-authentication--security) ⭐ NEW**
-15. **[Advanced Security Features](#15-advanced-security-features) ⭐ NEW**
+14. **[JWT Authentication Setup](#14-jwt-authentication--security) ⭐**
+15. **[Advanced Security Features](#15-advanced-security-features) ⭐**
+16. **[Implementation Order](#16-ordre-dimplémentation-recommandé) 🎯**
+17. **[Authentication Flow Diagram](#17-flow-complet-dauthentification) 🔄**
+18. **[Security Best Practices](#18-best-practices-de-sécurité) 🛡️**
 
 ---
 
@@ -513,16 +516,31 @@ Features:
 YourProjectName/
 ├── Controllers/
 │   ├── ProductsController.cs
-│   └── CategoriesController.cs
+│   ├── CategoriesController.cs
+│   └── AuthController.cs
 ├── Data/
-│   └── AppDbContext.cs
+│   ├── AppDbContext.cs
+│   └── UserDbContext.cs
+├── Entities/
+│   ├── User.cs
+│   ├── AuditLog.cs
+│   └── RefreshToken.cs
 ├── Models/
 │   ├── Product.cs
 │   ├── Category.cs
-│   └── VideoGame.cs
+│   ├── UserDto.cs
+│   ├── TokenResponseDto.cs
+│   └── RefreshTokenRequestDto.cs
+├── Services/
+│   ├── IAuthService.cs
+│   ├── AuthService.cs
+│   ├── IEmailService.cs
+│   └── EmailService.cs
+├── Validators/
+│   └── UserDtoValidator.cs
 ├── Migrations/
 │   ├── 20241013_InitialCreate.cs
-│   └── 20241014_AddProducts.cs
+│   └── 20241014_AddAuthEntities.cs
 ├── Program.cs
 ├── appsettings.json
 └── YourProjectName.csproj
@@ -753,6 +771,123 @@ namespace YourProjectName.Data
 }
 ```
 
+## 📋 Models/UserDto.cs
+
+```csharp
+namespace YourProjectName.Models
+{
+    public class UserDto
+    {
+        public string Username { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+    }
+}
+```
+
+## 📋 Models/TokenResponseDto.cs
+
+```csharp
+namespace YourProjectName.Models
+{
+    public class TokenResponseDto
+    {
+        public required string AccessToken { get; set; }
+        public required string RefreshToken { get; set; }
+    }
+}
+```
+
+## 📋 Models/RefreshTokenRequestDto.cs
+
+```csharp
+namespace YourProjectName.Models
+{
+    public class RefreshTokenRequestDto
+    {
+        public Guid UserId { get; set; }
+        public required string RefreshToken { get; set; }
+    }
+}
+```
+
+## 📋 Models/LoginDto.cs
+
+```csharp
+namespace YourProjectName.Models
+{
+    public class LoginDto
+    {
+        public string Username { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+        public bool RememberMe { get; set; } = false;
+    }
+}
+```
+
+## 📋 Models/PasswordResetDto.cs
+
+```csharp
+namespace YourProjectName.Models
+{
+    public class PasswordResetRequestDto
+    {
+        public string Email { get; set; } = string.Empty;
+    }
+
+    public class PasswordResetDto
+    {
+        public string Token { get; set; } = string.Empty;
+        public string NewPassword { get; set; } = string.Empty;
+    }
+}
+```
+
+## 📋 Models/RevokeTokenDto.cs
+
+```csharp
+namespace YourProjectName.Models
+{
+    public class RevokeTokenDto
+    {
+        public string Token { get; set; } = string.Empty;
+    }
+}
+```
+
+## ✅ Validators/UserDtoValidator.cs
+
+```csharp
+using FluentValidation;
+using YourProjectName.Models;
+
+namespace YourProjectName.Validators
+{
+    public class UserDtoValidator : AbstractValidator<UserDto>
+    {
+        public UserDtoValidator()
+        {
+            RuleFor(x => x.Username)
+                .NotEmpty().WithMessage("Username required")
+                .Length(3, 50).WithMessage("Username 3-50 characters")
+                .Matches("^[a-zA-Z0-9_-]+$").WithMessage("Letters, numbers, - and _ only");
+
+            RuleFor(x => x.Email)
+                .NotEmpty().WithMessage("Email required")
+                .EmailAddress().WithMessage("Valid email required");
+
+            RuleFor(x => x.Password)
+                .NotEmpty().WithMessage("Password required")
+                .MinimumLength(8).WithMessage("Min 8 characters")
+                .Matches("[A-Z]").WithMessage("One uppercase required")
+                .Matches("[a-z]").WithMessage("One lowercase required")
+                .Matches("[0-9]").WithMessage("One digit required")
+                .Matches("[^a-zA-Z0-9]").WithMessage("One special character required");
+        }
+    }
+}
+```
+
 ## 📧 Services/IEmailService.cs
 
 ```csharp
@@ -880,7 +1015,7 @@ namespace YourProjectName.Services
 }
 ```
 
-## 🔒 Services/AuthService.cs (Extrait principal)
+## 🔒 Services/AuthService.cs
 
 ```csharp
 using Microsoft.AspNetCore.Identity;
@@ -1295,7 +1430,7 @@ namespace YourProjectName.Services
 
 ---
 
-## 🎮 Controllers/AuthController.cs (Complet)
+## 🎮 Controllers/AuthController.cs
 
 ```csharp
 using Microsoft.AspNetCore.Authorization;
@@ -1470,52 +1605,6 @@ namespace YourProjectName.Controllers
 
 ---
 
-## 📋 Models/LoginDto.cs
-
-```csharp
-namespace YourProjectName.Models
-{
-    public class LoginDto
-    {
-        public string Username { get; set; } = string.Empty;
-        public string Password { get; set; } = string.Empty;
-        public bool RememberMe { get; set; } = false;
-    }
-}
-```
-
-## 📋 Models/PasswordResetDto.cs
-
-```csharp
-namespace YourProjectName.Models
-{
-    public class PasswordResetRequestDto
-    {
-        public string Email { get; set; } = string.Empty;
-    }
-
-    public class PasswordResetDto
-    {
-        public string Token { get; set; } = string.Empty;
-        public string NewPassword { get; set; } = string.Empty;
-    }
-}
-```
-
-## 📋 Models/RevokeTokenDto.cs
-
-```csharp
-namespace YourProjectName.Models
-{
-    public class RevokeTokenDto
-    {
-        public string Token { get; set; } = string.Empty;
-    }
-}
-```
-
----
-
 ## 🔧 Program.cs (Configuration Complète avec JWT)
 
 ```csharp
@@ -1648,11 +1737,11 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-// ⚠️ ORDER IS CRITICAL ⚠️
-app.UseIpRateLimiting();
-app.UseCors("AllowFrontend");
-app.UseAuthentication();
-app.UseAuthorization();
+// ⚠️ ORDER IS CRITICAL - DO NOT CHANGE ⚠️
+app.UseIpRateLimiting();        // 1. Rate limiting FIRST
+app.UseCors("AllowFrontend");   // 2. CORS
+app.UseAuthentication();         // 3. Authentication (BEFORE Authorization!)
+app.UseAuthorization();          // 4. Authorization
 
 app.MapControllers();
 app.MapHealthChecks("/health");
@@ -1685,200 +1774,230 @@ app.Run();
 - [x] **CORS** - Configuration pour frontend
 - [x] **Health Checks** - Vérification état de l'API
 
-### 🔜 Fonctionnalités Optionnelles (À Implémenter)
-- [ ] **2FA (Two-Factor Authentication)** - Authentification à deux facteurs
-- [ ] **Social Login** (Google, Facebook, etc.)
-- [ ] **IP Whitelist/Blacklist**
-- [ ] **Device Management** - Gestion des appareils connectés
+---
+
+# 16. Ordre d'Implémentation Recommandé
+
+## 🎯 Phase 1 : Setup Basique (30 min)
+1. Installer packages NuGet
+2. Créer `appsettings.json` avec config
+3. Créer les 3 Entities (User, AuditLog, RefreshToken)
+4. Créer `UserDbContext`
+5. Migration : `Add-Migration AddAuthEntities`
+6. Appliquer : `Update-Database`
+
+## 🎯 Phase 2 : Models & Validators (15 min)
+7. Créer tous les DTOs (UserDto, TokenResponseDto, etc.)
+8. Créer les Validators (UserDtoValidator)
+
+## 🎯 Phase 3 : Services (45 min)
+9. Créer `IEmailService` et `EmailService`
+10. Créer `IAuthService` et `AuthService`
+
+## 🎯 Phase 4 : Controller & Config (30 min)
+11. Créer `AuthController`
+12. Configurer `Program.cs` (JWT, CORS, Rate Limiting)
+
+## 🎯 Phase 5 : Tests (30 min)
+13. Configurer Gmail App Password
+14. Tester avec fichier `.http`
+15. Vérifier audit logs dans la BD
+
+**⏱️ Temps total estimé : 2h30**
 
 ---
 
-## 🔐 2FA (Two-Factor Authentication) - Guide d'Implémentation
+# 17. Flow Complet d'Authentification
 
-### Packages Requis
-```bash
-dotnet add package OtpNet
-dotnet add package QRCoder
+## 🔄 Diagramme de Flow
+
 ```
-
-### Entité User (Déjà ajouté)
-```csharp
-public bool TwoFactorEnabled { get; set; } = false;
-public string? TwoFactorSecret { get; set; }
-```
-
-### Service 2FA
-```csharp
-// Add to IAuthService
-Task<string> Enable2FAAsync(Guid userId);
-Task<bool> Verify2FAAsync(Guid userId, string code);
-Task<bool> Disable2FAAsync(Guid userId, string code);
-
-// Implementation in AuthService
-public async Task<string> Enable2FAAsync(Guid userId)
-{
-    var user = await _context.Users.FindAsync(userId);
-    if (user is null) throw new Exception("User not found");
-
-    var secret = OtpNet.KeyGeneration.GenerateRandomKey(20);
-    var base32Secret = OtpNet.Base32Encoding.ToString(secret);
-    
-    user.TwoFactorSecret = base32Secret;
-    user.TwoFactorEnabled = false; // Will be enabled after verification
-    
-    await _context.SaveChangesAsync();
-
-    // Generate QR code URL
-    var appName = "YourAppName";
-    var qrCodeUrl = $"otpauth://totp/{appName}:{user.Email}?secret={base32Secret}&issuer={appName}";
-    
-    return qrCodeUrl;
-}
-
-public async Task<bool> Verify2FAAsync(Guid userId, string code)
-{
-    var user = await _context.Users.FindAsync(userId);
-    if (user is null || string.IsNullOrEmpty(user.TwoFactorSecret))
-    {
-        return false;
-    }
-
-    var secretBytes = OtpNet.Base32Encoding.ToBytes(user.TwoFactorSecret);
-    var totp = new OtpNet.Totp(secretBytes);
-    
-    if (totp.VerifyTotp(code, out _, new VerificationWindow(2, 2)))
-    {
-        user.TwoFactorEnabled = true;
-        await _context.SaveChangesAsync();
-        return true;
-    }
-
-    return false;
-}
-```
-
----
-
-## 📊 Utilisation des Audit Logs
-
-### Requêtes Utiles
-
-```csharp
-// Voir toutes les actions d'un utilisateur
-[Authorize]
-[HttpGet("audit-logs/me")]
-public async Task<ActionResult<List<AuditLog>>> GetMyAuditLogs()
-{
-    var userId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
-    
-    var logs = await _context.AuditLogs
-        .Where(a => a.UserId == userId)
-        .OrderByDescending(a => a.Timestamp)
-        .Take(50)
-        .ToListAsync();
-    
-    return Ok(logs);
-}
-
-// Voir les tentatives de connexion échouées (Admin)
-[Authorize(Roles = "Admin")]
-[HttpGet("audit-logs/failed-logins")]
-public async Task<ActionResult<List<AuditLog>>> GetFailedLogins()
-{
-    var logs = await _context.AuditLogs
-        .Where(a => a.Action == "Login" && !a.Success)
-        .OrderByDescending(a => a.Timestamp)
-        .Take(100)
-        .ToListAsync();
-    
-    return Ok(logs);
-}
-
-// Voir les connexions par IP suspecte
-[Authorize(Roles = "Admin")]
-[HttpGet("audit-logs/suspicious-ips")]
-public async Task<ActionResult> GetSuspiciousIPs()
-{
-    var suspiciousIPs = await _context.AuditLogs
-        .Where(a => !a.Success)
-        .GroupBy(a => a.IpAddress)
-        .Where(g => g.Count() > 10)
-        .Select(g => new
-        {
-            IpAddress = g.Key,
-            FailedAttempts = g.Count(),
-            LastAttempt = g.Max(a => a.Timestamp)
-        })
-        .ToListAsync();
-    
-    return Ok(suspiciousIPs);
-}
+┌─────────────┐
+│   CLIENT    │
+└──────┬──────┘
+       │
+       │ 1. POST /register {username, email, password}
+       ▼
+┌─────────────────────────────────────────────────┐
+│  API - Register                                 │
+│  • Hash password                                │
+│  • Generate email verification token            │
+│  • Save user (EmailVerified = false)            │
+│  • Send verification email                      │
+└──────┬──────────────────────────────────────────┘
+       │
+       │ 2. User clicks link in email
+       │    GET /verify-email?token=xxx
+       ▼
+┌─────────────────────────────────────────────────┐
+│  API - Verify Email                             │
+│  • Check token validity                         │
+│  • Set EmailVerified = true                     │
+└──────┬──────────────────────────────────────────┘
+       │
+       │ 3. POST /login {username, password}
+       ▼
+┌─────────────────────────────────────────────────┐
+│  API - Login                                    │
+│  • Verify credentials                           │
+│  • Check EmailVerified = true                   │
+│  • Generate Access Token (15 min)               │
+│  • Generate Refresh Token (7 days)              │
+│  • Save Refresh Token in DB                     │
+│  • Log audit (IP, UserAgent)                    │
+└──────┬──────────────────────────────────────────┘
+       │
+       │ Returns: {accessToken, refreshToken}
+       ▼
+┌─────────────┐
+│   CLIENT    │  Stores tokens
+│   Saves:    │  • accessToken in memory
+│   • access  │  • refreshToken in httpOnly cookie
+│   • refresh │    or secure storage
+└──────┬──────┘
+       │
+       │ 4. GET /api/protected
+       │    Authorization: Bearer {accessToken}
+       ▼
+┌─────────────────────────────────────────────────┐
+│  API - Protected Endpoint                       │
+│  • Validate JWT signature                       │
+│  • Check expiration                             │
+│  • Extract user claims                          │
+└──────┬──────────────────────────────────────────┘
+       │
+       │ Returns: Protected data
+       ▼
+┌─────────────┐
+│   CLIENT    │
+└──────┬──────┘
+       │
+       │ 5. After 15 min, Access Token expires
+       │    POST /refresh-tokens {userId, refreshToken}
+       ▼
+┌─────────────────────────────────────────────────┐
+│  API - Refresh Tokens (with Rotation)          │
+│  • Find Refresh Token in DB                     │
+│  • Validate: not expired, not revoked           │
+│  • Revoke old Refresh Token                     │
+│  • Generate NEW Access Token                    │
+│  • Generate NEW Refresh Token                   │
+│  • Link old → new (ReplacedByToken)             │
+│  • Save new Refresh Token in DB                 │
+└──────┬──────────────────────────────────────────┘
+       │
+       │ Returns: {newAccessToken, newRefreshToken}
+       ▼
+┌─────────────┐
+│   CLIENT    │  Updates tokens
+└─────────────┘
 ```
 
 ---
 
-## 🔄 Refresh Token Rotation - Comment ça marche ?
+# 18. Best Practices de Sécurité
 
-### Principe
-1. **Client** envoie Refresh Token
-2. **API** vérifie le token
-3. **API** révoque l'ancien token
-4. **API** génère NOUVEAU Access Token + NOUVEAU Refresh Token
-5. **API** lie l'ancien token au nouveau (pour audit)
-6. **Client** reçoit les nouveaux tokens
+## 🛡️ À FAIRE
 
-### Avantages
-- ✅ Si un Refresh Token est volé, il devient invalide dès la prochaine rotation
-- ✅ Traçabilité complète dans la table `RefreshTokens`
-- ✅ Détection des tokens compromis (si ancien token utilisé après rotation)
+✅ **HTTPS uniquement** en production  
+✅ **Tokens courts** - Access Token max 30 min  
+✅ **Rotation des tokens** - Toujours implémenter  
+✅ **Rate limiting** - Essentiel contre brute force  
+✅ **Audit logs** - Tracer TOUTES les actions sensibles  
+✅ **Secrets sécurisés** - Utiliser Azure Key Vault / AWS Secrets Manager en prod  
+✅ **Email verification** - Obligatoire pour sécurité  
+✅ **Strong passwords** - Min 8 chars, majuscule, minuscule, chiffre, spécial
 
-### Détection de Token Compromis
-```csharp
-// Add to AuthService
-private async Task<bool> IsTokenCompromisedAsync(string token)
-{
-    var refreshToken = await _context.RefreshTokens
-        .FirstOrDefaultAsync(rt => rt.Token == token);
+## ❌ À ÉVITER
 
-    // Si le token a été révoqué ET a un replacedByToken, c'est suspect
-    if (refreshToken is not null && 
-        refreshToken.IsRevoked && 
-        !string.IsNullOrEmpty(refreshToken.ReplacedByToken))
-    {
-        // Quelqu'un essaie d'utiliser un ancien token
-        // Action: Révoquer TOUTE la chaîne de tokens
-        await RevokeDescendantRefreshTokensAsync(refreshToken);
-        return true;
-    }
+❌ **Token dans URL** - Jamais exposer token dans query params  
+❌ **Pas de HTTPS** - Tokens volés en transit  
+❌ **Token trop long** - Access Token > 1h = risque  
+❌ **Secrets hardcodés** - Toujours utiliser appsettings/env variables  
+❌ **localStorage pour tokens** - Utiliser httpOnly cookies ou mémoire  
+❌ **Pas de validation** - Toujours valider entrées utilisateur  
+❌ **Ignorer rate limiting** - Facilite les attaques
 
-    return false;
-}
+## 🔒 Production Checklist
 
-private async Task RevokeDescendantRefreshTokensAsync(RefreshTokenEntity refreshToken)
-{
-    // Révoquer récursivement tous les tokens descendants
-    if (!string.IsNullOrEmpty(refreshToken.ReplacedByToken))
-    {
-        var childToken = await _context.RefreshTokens
-            .FirstOrDefaultAsync(rt => rt.Token == refreshToken.ReplacedByToken);
-        
-        if (childToken is not null && childToken.IsActive)
-        {
-            childToken.IsRevoked = true;
-            childToken.RevokedAt = DateTime.UtcNow;
-            await RevokeDescendantRefreshTokensAsync(childToken);
-        }
-    }
-    
-    await _context.SaveChangesAsync();
+- [ ] Clé JWT > 256 bits (32+ caractères)
+- [ ] HTTPS configuré avec certificat valide
+- [ ] Secrets dans Azure Key Vault / AWS
+- [ ] Rate limiting activé
+- [ ] Logs d'audit en place
+- [ ] Email verification obligatoire
+- [ ] CORS configuré strictement (pas de "*")
+- [ ] Health checks configurés
+- [ ] Monitoring actif (Application Insights, Sentry)
+
+---
+
+# 19. Troubleshooting JWT
+
+## Issue: "401 Unauthorized" même avec token valide
+
+**Solution:**
+- Vérifier que `UseAuthentication()` est AVANT `UseAuthorization()`
+- Vérifier que la clé secrète dans appsettings match celle utilisée pour générer le token
+- Vérifier l'expiration du token avec [jwt.io](https://jwt.io)
+
+## Issue: "Bearer token not found"
+
+**Solution:**
+- Header doit être : `Authorization: Bearer YOUR_TOKEN`
+- Pas d'espace après "Bearer" sauf avant le token
+
+## Issue: Email non envoyé
+
+**Solution:**
+- Vérifier que le App Password Gmail est correct (16 caractères)
+- Vérifier que la validation en 2 étapes est activée sur Gmail
+- Vérifier les ports : 587 pour TLS, 465 pour SSL
+
+## Issue: Rate limiting ne fonctionne pas
+
+**Solution:**
+- Vérifier que `UseIpRateLimiting()` est appelé AVANT `UseAuthorization()`
+- Vérifier que les règles sont bien configurées dans appsettings.json
+- Tester avec plusieurs requêtes rapides
+
+## Issue: Refresh token rotation échoue
+
+**Solution:**
+- Vérifier que le token n'est pas déjà révoqué dans la base de données
+- Vérifier que le token n'est pas expiré
+- Vérifier que le userId correspond bien
+
+---
+
+# 20. Configuration Gmail pour l'Email
+
+## 📧 Étapes pour obtenir un App Password Gmail
+
+1. Aller sur [Google Account](https://myaccount.google.com/)
+2. Sécurité → Validation en deux étapes (activer si pas déjà fait)
+3. Mots de passe des applications
+4. Sélectionner "Application" → Autre → "YourAppName"
+5. Copier le mot de passe généré (16 caractères)
+6. Mettre dans appsettings.json :
+
+```json
+"EmailSettings": {
+  "SmtpServer": "smtp.gmail.com",
+  "SmtpPort": 587,
+  "SenderEmail": "your-email@gmail.com",
+  "SenderName": "Your App",
+  "Username": "your-email@gmail.com",
+  "Password": "xxxx xxxx xxxx xxxx"
 }
 ```
 
 ---
 
-## 🧪 Tests API - Exemples Complets
+# 21. Tests API - Exemples Complets
 
-### test-auth.http
+## 🧪 test-auth.http
+
 ```http
 @baseUrl = https://localhost:7020
 @accessToken = YOUR_ACCESS_TOKEN
@@ -1982,7 +2101,205 @@ Content-Type: application/json
 
 ---
 
-## 🎯 Migration Commands
+# 22. Utilisation des Audit Logs
+
+## 📊 Requêtes Utiles
+
+### Voir toutes les actions d'un utilisateur
+
+```csharp
+[Authorize]
+[HttpGet("audit-logs/me")]
+public async Task<ActionResult<List<AuditLog>>> GetMyAuditLogs()
+{
+    var userId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
+    
+    var logs = await _context.AuditLogs
+        .Where(a => a.UserId == userId)
+        .OrderByDescending(a => a.Timestamp)
+        .Take(50)
+        .ToListAsync();
+    
+    return Ok(logs);
+}
+```
+
+### Voir les tentatives de connexion échouées (Admin)
+
+```csharp
+[Authorize(Roles = "Admin")]
+[HttpGet("audit-logs/failed-logins")]
+public async Task<ActionResult<List<AuditLog>>> GetFailedLogins()
+{
+    var logs = await _context.AuditLogs
+        .Where(a => a.Action == "Login" && !a.Success)
+        .OrderByDescending(a => a.Timestamp)
+        .Take(100)
+        .ToListAsync();
+    
+    return Ok(logs);
+}
+```
+
+### Voir les connexions par IP suspecte
+
+```csharp
+[Authorize(Roles = "Admin")]
+[HttpGet("audit-logs/suspicious-ips")]
+public async Task<ActionResult> GetSuspiciousIPs()
+{
+    var suspiciousIPs = await _context.AuditLogs
+        .Where(a => !a.Success)
+        .GroupBy(a => a.IpAddress)
+        .Where(g => g.Count() > 10)
+        .Select(g => new
+        {
+            IpAddress = g.Key,
+            FailedAttempts = g.Count(),
+            LastAttempt = g.Max(a => a.Timestamp)
+        })
+        .ToListAsync();
+    
+    return Ok(suspiciousIPs);
+}
+```
+
+---
+
+# 23. Refresh Token Rotation - Comment ça marche ?
+
+## 🔄 Principe
+
+1. **Client** envoie Refresh Token
+2. **API** vérifie le token
+3. **API** révoque l'ancien token
+4. **API** génère NOUVEAU Access Token + NOUVEAU Refresh Token
+5. **API** lie l'ancien token au nouveau (pour audit)
+6. **Client** reçoit les nouveaux tokens
+
+## ✅ Avantages
+
+- Si un Refresh Token est volé, il devient invalide dès la prochaine rotation
+- Traçabilité complète dans la table `RefreshTokens`
+- Détection des tokens compromis (si ancien token utilisé après rotation)
+
+## 🔍 Détection de Token Compromis
+
+```csharp
+// Add to AuthService
+private async Task<bool> IsTokenCompromisedAsync(string token)
+{
+    var refreshToken = await _context.RefreshTokens
+        .FirstOrDefaultAsync(rt => rt.Token == token);
+
+    // Si le token a été révoqué ET a un replacedByToken, c'est suspect
+    if (refreshToken is not null && 
+        refreshToken.IsRevoked && 
+        !string.IsNullOrEmpty(refreshToken.ReplacedByToken))
+    {
+        // Quelqu'un essaie d'utiliser un ancien token
+        // Action: Révoquer TOUTE la chaîne de tokens
+        await RevokeDescendantRefreshTokensAsync(refreshToken);
+        return true;
+    }
+
+    return false;
+}
+
+private async Task RevokeDescendantRefreshTokensAsync(RefreshTokenEntity refreshToken)
+{
+    // Révoquer récursivement tous les tokens descendants
+    if (!string.IsNullOrEmpty(refreshToken.ReplacedByToken))
+    {
+        var childToken = await _context.RefreshTokens
+            .FirstOrDefaultAsync(rt => rt.Token == refreshToken.ReplacedByToken);
+        
+        if (childToken is not null && childToken.IsActive)
+        {
+            childToken.IsRevoked = true;
+            childToken.RevokedAt = DateTime.UtcNow;
+            await RevokeDescendantRefreshTokensAsync(childToken);
+        }
+    }
+    
+    await _context.SaveChangesAsync();
+}
+```
+
+---
+
+# 24. 2FA (Two-Factor Authentication) - Guide d'Implémentation
+
+## 📦 Packages Requis
+
+```bash
+dotnet add package OtpNet
+dotnet add package QRCoder
+```
+
+## 🔐 Entité User (Déjà ajouté)
+
+```csharp
+public bool TwoFactorEnabled { get; set; } = false;
+public string? TwoFactorSecret { get; set; }
+```
+
+## 🛠️ Service 2FA
+
+```csharp
+// Add to IAuthService
+Task<string> Enable2FAAsync(Guid userId);
+Task<bool> Verify2FAAsync(Guid userId, string code);
+Task<bool> Disable2FAAsync(Guid userId, string code);
+
+// Implementation in AuthService
+public async Task<string> Enable2FAAsync(Guid userId)
+{
+    var user = await _context.Users.FindAsync(userId);
+    if (user is null) throw new Exception("User not found");
+
+    var secret = OtpNet.KeyGeneration.GenerateRandomKey(20);
+    var base32Secret = OtpNet.Base32Encoding.ToString(secret);
+    
+    user.TwoFactorSecret = base32Secret;
+    user.TwoFactorEnabled = false; // Will be enabled after verification
+    
+    await _context.SaveChangesAsync();
+
+    // Generate QR code URL
+    var appName = "YourAppName";
+    var qrCodeUrl = $"otpauth://totp/{appName}:{user.Email}?secret={base32Secret}&issuer={appName}";
+    
+    return qrCodeUrl;
+}
+
+public async Task<bool> Verify2FAAsync(Guid userId, string code)
+{
+    var user = await _context.Users.FindAsync(userId);
+    if (user is null || string.IsNullOrEmpty(user.TwoFactorSecret))
+    {
+        return false;
+    }
+
+    var secretBytes = OtpNet.Base32Encoding.ToBytes(user.TwoFactorSecret);
+    var totp = new OtpNet.Totp(secretBytes);
+    
+    if (totp.VerifyTotp(code, out _, new VerificationWindow(2, 2)))
+    {
+        user.TwoFactorEnabled = true;
+        await _context.SaveChangesAsync();
+        return true;
+    }
+
+    return false;
+}
+```
+
+---
+
+# 25. Migration Commands
+
+## 🗄️ Commandes Essentielles
 
 ```bash
 # Create migration for User, AuditLog, RefreshToken
@@ -1994,57 +2311,22 @@ dotnet ef database update
 # If you need to add 2FA later
 dotnet ef migrations add Add2FASupport
 dotnet ef database update
+
+# Remove last migration
+dotnet ef migrations remove
+
+# List all migrations
+dotnet ef migrations list
+
+# Generate SQL script
+dotnet ef migrations script
 ```
 
 ---
 
-## 📋 Checklist Finale d'Implémentation
+# 26. Prochaines Étapes (Fonctionnalités Optionnelles)
 
-### Étapes à Suivre
-
-- [ ] 1. Installer tous les packages NuGet requis
-- [ ] 2. Créer les entités (User, AuditLog, RefreshTokenEntity)
-- [ ] 3. Créer le DbContext avec les DbSets
-- [ ] 4. Configurer appsettings.json
-- [ ] 5. Créer les Models/DTOs
-- [ ] 6. Créer les Validators (FluentValidation)
-- [ ] 7. Implémenter IEmailService et EmailService
-- [ ] 8. Implémenter IAuthService et AuthService
-- [ ] 9. Créer AuthController
-- [ ] 10. Configurer Program.cs (JWT, CORS, Rate Limiting, etc.)
-- [ ] 11. Créer et appliquer les migrations
-- [ ] 12. Tester avec le fichier .http
-- [ ] 13. Vérifier les logs d'audit dans la BD
-- [ ] 14. Tester le rate limiting
-- [ ] 15. Configurer le service email (Gmail App Password)
-
----
-
-## 🔐 Configuration Gmail pour l'Email
-
-### Étapes pour obtenir un App Password Gmail
-
-1. Aller sur [Google Account](https://myaccount.google.com/)
-2. Sécurité → Validation en deux étapes (activer si pas déjà fait)
-3. Mots de passe des applications
-4. Sélectionner "Application" → Autre → "YourAppName"
-5. Copier le mot de passe généré (16 caractères)
-6. Mettre dans appsettings.json :
-
-```json
-"EmailSettings": {
-  "SmtpServer": "smtp.gmail.com",
-  "SmtpPort": 587,
-  "SenderEmail": "your-email@gmail.com",
-  "SenderName": "Your App",
-  "Username": "your-email@gmail.com",
-  "Password": "xxxx xxxx xxxx xxxx"  // App password
-}
-```
-
----
-
-## 🚀 Prochaines Étapes (Fonctionnalités Avancées)
+## 🔜 Fonctionnalités à Implémenter
 
 ### 1. Implémenter 2FA (Two-Factor Authentication)
 - Package : `OtpNet`, `QRCoder`
@@ -2068,15 +2350,61 @@ dotnet ef database update
 
 ---
 
-## 📚 Ressources Utiles
+# 27. Ressources Utiles
+
+## 📚 Documentation & Outils
 
 - [JWT.io](https://jwt.io/) - Décoder et vérifier les JWT
 - [OWASP Authentication Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html)
 - [Microsoft Identity Documentation](https://learn.microsoft.com/en-us/aspnet/core/security/)
 - [FluentValidation Docs](https://docs.fluentvalidation.net/)
+- [ASP.NET Core Security Best Practices](https://learn.microsoft.com/en-us/aspnet/core/security/authentication/)
+- [Entity Framework Core Docs](https://learn.microsoft.com/en-us/ef/core/)
+
+---
+
+# 28. Checklist Finale d'Implémentation
+
+## ✅ Étapes Complètes
+
+### Setup Initial
+- [ ] Installer tous les packages NuGet requis
+- [ ] Créer les entités (User, AuditLog, RefreshTokenEntity)
+- [ ] Créer le DbContext avec les DbSets
+- [ ] Configurer appsettings.json
+
+### Models & Validators
+- [ ] Créer les Models/DTOs
+- [ ] Créer les Validators (FluentValidation)
+
+### Services
+- [ ] Implémenter IEmailService et EmailService
+- [ ] Implémenter IAuthService et AuthService
+
+### Controllers & Configuration
+- [ ] Créer AuthController
+- [ ] Configurer Program.cs (JWT, CORS, Rate Limiting, etc.)
+
+### Base de Données
+- [ ] Créer et appliquer les migrations
+- [ ] Vérifier que les tables sont créées
+
+### Tests
+- [ ] Configurer le service email (Gmail App Password)
+- [ ] Tester avec le fichier .http
+- [ ] Vérifier les logs d'audit dans la BD
+- [ ] Tester le rate limiting
+- [ ] Vérifier que tous les endpoints fonctionnent
+
+### Production
+- [ ] Changer la clé JWT secrète (32+ caractères)
+- [ ] Configurer HTTPS
+- [ ] Déplacer les secrets vers Azure Key Vault / AWS
+- [ ] Configurer le monitoring
+- [ ] Tester la sécurité (penetration testing)
 
 ---
 
 **Last Updated:** October 2024 | **Framework:** .NET 9.0 | **EF Core:** 9.0.9
 
-**✨ Félicitations ! Tu as maintenant une API ASP.NET Core complète avec authentification JWT et toutes les fonctionnalités de sécurité modernes !** 🎉
+**✨ Félicitations ! Tu as maintenant un guide complet pour créer une API ASP.NET Core avec authentification JWT et toutes les fonctionnalités de sécurité modernes !** 🎉
