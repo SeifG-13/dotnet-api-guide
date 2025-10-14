@@ -75,21 +75,17 @@ using YourProjectName.Models;
 
 namespace YourProjectName.Data
 {
-    public class AppDbContext : DbContext
+    public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
     {
-        public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
-        {
-        }
-
         // Add your DbSets here
         // ✅ NAMING CONVENTION: Use plural of model name for property
         // Property name = Table name in database (by default)
-        public DbSet<YourModel> YourModels => Set<YourModel>();
+        public DbSet<YourModel> YourModels { get; set; }
         
         // Examples:
-        // public DbSet<Product> Products => Set<Product>();        // Table: Products
-        // public DbSet<Category> Categories => Set<Category>();    // Table: Categories
-        // public DbSet<VideoGame> VideoGames => Set<VideoGame>(); // Table: VideoGames
+        // public DbSet<Product> Products { get; set; }        // Table: Products
+        // public DbSet<Category> Categories { get; set; }    // Table: Categories
+        // public DbSet<VideoGame> VideoGames { get; set; } // Table: VideoGames
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -119,38 +115,56 @@ namespace YourProjectName.Data
 ### Understanding DbSet Syntax
 
 ```csharp
-public DbSet<ModelName> PropertyName => Set<ModelName>();
-         ↑               ↑                    ↑
-     Type (Model)   Property/Table      EF Core method
+public DbSet<ModelName> PropertyName { get; set; }
+         ↑               ↑              ↑
+     Type (Model)   Property/Table   Auto-property
 ```
 
 **Breakdown:**
 - `DbSet<ModelName>`: The type - tells C# this is a collection of ModelName entities
 - `PropertyName`: What you use in code AND becomes the table name in database
-- `Set<ModelName>()`: EF Core method that returns the DbSet for that entity
+- `{ get; set; }`: Auto-implemented property syntax
 
 **Examples:**
 
 ```csharp
 // ✅ GOOD: Standard convention - Plural property name
-public DbSet<Product> Products => Set<Product>();
+public DbSet<Product> Products { get; set; }
 // In code: _context.Products.ToListAsync()
 // Database table name: Products
 
 // ✅ GOOD: Custom table name (when needed)
-public DbSet<User> AppUsers => Set<User>();
+public DbSet<User> AppUsers { get; set; }
 // In code: _context.AppUsers.ToListAsync()
 // Database table name: AppUsers
 
-// ❌ WRONG: Don't use plural in Set<>
-public DbSet<Product> Products => Set<Products>();  // ❌ Products is not a type!
-
 // ⚠️ WORKS but breaks convention
-public DbSet<Product> ProductTable => Set<Product>();
+public DbSet<Product> ProductTable { get; set; }
 // Confusing and non-standard naming
 ```
 
-**Key Rule:** The name inside `Set<HERE>` must be your Model class name (singular), not the property name!
+### 💡 Alternative Constructor Syntax
+
+**Primary Constructor (C# 12+, .NET 8+) - Used in this guide:**
+```csharp
+public class AppDbContext(DbContextOptions<AppDbContext> options) 
+    : DbContext(options)
+{
+}
+```
+
+**Traditional Constructor (All versions):**
+```csharp
+public class AppDbContext : DbContext
+{
+    public AppDbContext(DbContextOptions<AppDbContext> options) 
+        : base(options)
+    {
+    }
+}
+```
+
+Both work identically. Primary constructor is more concise when you only need to pass parameters to the base class.
 
 ---
 
@@ -526,8 +540,8 @@ dotnet ef database drop
 # 1. Create your models (Product.cs, Category.cs)
 
 # 2. Add to DbContext
-# public DbSet<Product> Products => Set<Product>();
-# public DbSet<Category> Categories => Set<Category>();
+# public DbSet<Product> Products { get; set; }
+# public DbSet<Category> Categories { get; set; }
 
 # 3. Create migration
 Add-Migration AddProductAndCategory
@@ -761,7 +775,7 @@ Update-Database
 ```
 
 ### Issue: DbSet property not recognized
-**Solution:** Ensure you're using `Set<ModelName>()` not `Set<PropertyName>()`
+**Solution:** Ensure DbSet properties are properly declared with `{ get; set; }`
 
 ---
 
