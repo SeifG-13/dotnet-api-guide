@@ -15,7 +15,7 @@
 ### 📖 [GitHub Markdown Version 1.3](./dotnet-api-cheat-sheet.md)
 Read directly on GitHub with syntax highlighting and navigation.
 
-### 📝 [Notion Template Version 1.2 → 1.3 ![Loading](https://raw.githubusercontent.com/Codelessly/FlutterLoadingGIFs/master/packages/circular_progress_indicator_small.gif)](https://seifbenali.notion.site/dotnet-api-guide-notion-28bfe8fdb58580929399e392bbbb74a0)
+### 📝 [Notion Template Version 1.2 → 1.3 ![updating](https://img.shields.io/badge/status-updating-blue?style=flat&logo=notion&logoColor=white)](https://seifbenali.notion.site/dotnet-api-guide-notion-28bfe8fdb58580929399e392bbbb74a0)
 Interactive version with collapsible sections. Click to **duplicate to your workspace**!
 
 ---
