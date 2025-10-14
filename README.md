@@ -18,8 +18,8 @@ Read directly on GitHub with syntax highlighting and navigation.
 ### 📝 [Notion Template Version 1.2 → 1.3](https://seifbenali.notion.site/dotnet-api-guide-notion-28bfe8fdb58580929399e392bbbb74a0)
 
 <div align="center">
-  <img src="https://i.imgur.com/5c7eHQv.gif" alt="Loading" width="50" />
-  <p><em>Interactive version with collapsible sections. Click to <strong>duplicate to your workspace</strong>!</em></p>
+  <img src="https://media.giphy.com/media/3oEjI6SIIHBdRxXI40/giphy.gif" alt="Loading..." width="50"/>
+  <p><em>Interactive version with collapsible sections. Click to <strong>duplicate to your workspace!</strong></em></p>
 </div>
 
 ---
