@@ -1,540 +1,4 @@
-### 7. Refresh Tokens
-POST {{baseUrl}}/api/auth/refresh-tokens
-Content-Type: application/json
-
-{
-  "userId": "{{userId}}",
-  "refreshToken": "{{refreshToken}}"
-}
-
-### 8. Request Password Reset
-POST {{baseUrl}}/api/auth/request-password-reset
-Content-Type: application/json
-
-{
-  "email": "test@example.com"
-}
-
-### 9. Reset Password
-POST {{baseUrl}}/api/auth/reset-password
-Content-Type: application/json
-
-{
-  "token": "{{passwordResetToken}}",
-  "newPassword": "NewPass@1234"
-}
-
-### 10. Get My Audit Logs
-GET {{baseUrl}}/api/auth/audit-logs/me
-Authorization: Bearer {{accessToken}}
-
-### 11. Logout
-POST {{baseUrl}}/api/auth/logout
-Authorization: Bearer {{accessToken}}
-
-### 12. Revoke Specific Token
-POST {{baseUrl}}/api/auth/revoke-token
-Authorization: Bearer {{accessToken}}
-Content-Type: application/json
-
-{
-  "token": "{{refreshToken}}"
-}
-
-### 13. Test Rate Limiting (Try 6 times quickly)
-POST {{baseUrl}}/api/auth/login
-Content-Type: application/json
-
-{
-  "username": "testuser",
-  "password": "WrongPassword123!"
-}
-
-### 14. Admin Only Endpoint
-GET {{baseUrl}}/api/auth/admin-only
-Authorization: Bearer {{accessToken}}
-```
-
----
-
-## 🎯 Workflow Complet - Du Registration au Logout
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    REGISTRATION FLOW                             │
-└─────────────────────────────────────────────────────────────────┘
-
-1. Client → POST /api/auth/register
-   {username, email, password}
-   
-2. API:
-   ✓ Valide données (FluentValidation)
-   ✓ Hash password (PasswordHasher)
-   ✓ Génère EmailVerificationToken
-   ✓ Sauvegarde user (EmailVerified = false)
-   ✓ Envoie email de vérification
-   ✓ Log audit (Action: Register, Success: true)
-   
-3. Client reçoit: {message, userId}
-
-4. User clique sur lien email → GET /verify-email?token=xxx
-
-5. API:
-   ✓ Valide token (non expiré)
-   ✓ EmailVerified = true
-   ✓ Log audit (Action: VerifyEmail, Success: true)
-
-┌─────────────────────────────────────────────────────────────────┐
-│                        LOGIN FLOW                                │
-└─────────────────────────────────────────────────────────────────┘
-
-1. Client → POST /api/auth/login
-   {username, password, rememberMe}
-   
-2. API vérifie:
-   ✓ User existe ?
-   ✓ Account locked ? (après 5 tentatives échouées)
-   ✓ Password correct ?
-   ✓ Email vérifié ?
-   
-3. API:
-   ✓ Génère Access Token (15 min)
-   ✓ Génère Refresh Token (7 jours) → Sauvegarde en BD
-   ✓ Si RememberMe → Génère RememberMeToken (30 jours)
-   ✓ Reset FailedLoginAttempts = 0
-   ✓ LastLoginAt = NOW
-   ✓ Envoie email de notification de connexion
-   ✓ Log audit (Action: Login, Success: true, IP: xxx)
-   
-4. Client reçoit: {accessToken, refreshToken}
-
-5. Client stocke:
-   - AccessToken → Memory ou SessionStorage (sécurisé)
-   - RefreshToken → HttpOnly Cookie ou LocalStorage
-   - UserId → Pour les refresh requests
-
-┌─────────────────────────────────────────────────────────────────┐
-│                   AUTHENTICATED REQUESTS                         │
-└─────────────────────────────────────────────────────────────────┘
-
-1. Client → GET /api/protected-endpoint
-   Headers: Authorization: Bearer ACCESS_TOKEN
-   
-2. API:
-   ✓ JWT Middleware valide le token:
-     - Signature valide ?
-     - Issuer correct ?
-     - Audience correcte ?
-     - Pas expiré ? (15 min)
-   ✓ Rate Limiting vérifie (60 req/min)
-   ✓ Extrait Claims (username, userId, role)
-   
-3. Controller accède à User.Identity.Name
-   
-4. API retourne données protégées
-
-┌─────────────────────────────────────────────────────────────────┐
-│                   TOKEN REFRESH FLOW (Rotation)                  │
-└─────────────────────────────────────────────────────────────────┘
-
-1. Access Token expire après 15 min
-   
-2. Client reçoit 401 Unauthorized
-
-3. Client → POST /api/auth/refresh-tokens
-   {userId, refreshToken}
-   
-4. API:
-   ✓ Trouve Refresh Token en BD
-   ✓ Token valide ? (not revoked, not expired)
-   ✓ RÉVOQUE l'ancien token (IsRevoked = true)
-   ✓ Génère NOUVEAU Access Token (15 min)
-   ✓ Génère NOUVEAU Refresh Token (7 jours)
-   ✓ Lie ancien → nouveau (ReplacedByToken)
-   ✓ Sauvegarde nouveau token en BD
-   ✓ Log audit (Action: RefreshToken, Success: true)
-   
-5. Client reçoit: {accessToken, refreshToken}
-
-6. Client remplace les anciens tokens
-
-┌─────────────────────────────────────────────────────────────────┐
-│                     PASSWORD RESET FLOW                          │
-└─────────────────────────────────────────────────────────────────┘
-
-1. Client → POST /api/auth/request-password-reset
-   {email}
-   
-2. API:
-   ✓ Trouve user par email
-   ✓ Génère PasswordResetToken
-   ✓ PasswordResetTokenExpiry = NOW + 30 min
-   ✓ Envoie email avec lien de reset
-   ✓ Log audit (Action: PasswordResetRequest)
-   
-3. Client clique sur lien → Page de reset password
-
-4. Client → POST /api/auth/reset-password
-   {token, newPassword}
-   
-5. API:
-   ✓ Valide token (non expiré)
-   ✓ Hash nouveau password
-   ✓ PasswordHash = nouveau hash
-   ✓ Clear tokens de reset
-   ✓ RÉVOQUE tous les Refresh Tokens actifs (force re-login)
-   ✓ Log audit (Action: PasswordReset, Success: true)
-   
-6. User doit se reconnecter avec nouveau password
-
-┌─────────────────────────────────────────────────────────────────┐
-│                        LOGOUT FLOW                               │
-└─────────────────────────────────────────────────────────────────┘
-
-1. Client → POST /api/auth/logout
-   Headers: Authorization: Bearer ACCESS_TOKEN
-   
-2. API:
-   ✓ Extrait userId du token
-   ✓ Trouve tous les Refresh Tokens actifs du user
-   ✓ RÉVOQUE tous les tokens (IsRevoked = true)
-   ✓ Log audit (Action: Logout, Success: true)
-   
-3. Client:
-   ✓ Supprime Access Token
-   ✓ Supprime Refresh Token
-   ✓ Redirige vers login page
-
-┌─────────────────────────────────────────────────────────────────┐
-│                  SECURITY MECHANISMS                             │
-└─────────────────────────────────────────────────────────────────┘
-
-Rate Limiting:
-- 60 requêtes/min (général)
-- 5 tentatives login/min
-- 3 registrations/heure
-
-Account Lockout:
-- 5 tentatives échouées → Lock 30 min
-- FailedLoginAttempts compteur
-- LockoutEnd timestamp
-
-Audit Logs:
-- Qui: UserId, Username
-- Quand: Timestamp
-- Quoi: Action (Login, Register, etc.)
-- Où: IpAddress, UserAgent
-- Résultat: Success (true/false)
-
-Token Rotation:
-- Ancien token → Révoqué
-- Nouveau token → Actif
-- Chaîne traçable (ReplacedByToken)
-```
-
----
-
-## 🔒 Bonnes Pratiques de Sécurité
-
-### 1. Stockage des Tokens (Frontend)
-
-```javascript
-// ✅ RECOMMANDÉ - Access Token en mémoire
-let accessToken = null;
-
-function setAccessToken(token) {
-  accessToken = token;
-}
-
-function getAccessToken() {
-  return accessToken;
-}
-
-// ✅ RECOMMANDÉ - Refresh Token en HttpOnly Cookie (backend)
-// OU LocalStorage avec précautions
-localStorage.setItem('refreshToken', token);
-
-// ❌ À ÉVITER - Access Token en LocalStorage
-// localStorage.setItem('accessToken', token); // Vulnérable XSS
-```
-
-### 2. Gestion de l'Expiration
-
-```javascript
-// Interceptor Axios pour refresh automatique
-axios.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    const originalRequest = error.config;
-
-    if (error.response.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-
-      try {
-        // Refresh le token
-        const { data } = await axios.post('/api/auth/refresh-tokens', {
-          userId: getUserId(),
-          refreshToken: getRefreshToken()
-        });
-
-        setAccessToken(data.accessToken);
-        setRefreshToken(data.refreshToken);
-
-        // Retry la requête originale
-        originalRequest.headers['Authorization'] = `Bearer ${data.accessToken}`;
-        return axios(originalRequest);
-      } catch (refreshError) {
-        // Refresh failed → Logout
-        logout();
-        window.location.href = '/login';
-      }
-    }
-
-    return Promise.reject(error);
-  }
-);
-```
-
-### 3. Configuration HTTPS (Production)
-
-```csharp
-// Program.cs - Production only
-if (!app.Environment.IsDevelopment())
-{
-    app.UseHsts(); // HTTP Strict Transport Security
-    app.UseHttpsRedirection();
-    
-    // Force HTTPS
-    app.Use(async (context, next) =>
-    {
-        if (!context.Request.IsHttps)
-        {
-            context.Response.StatusCode = 403;
-            await context.Response.WriteAsync("HTTPS Required");
-            return;
-        }
-        await next();
-    });
-}
-```
-
-### 4. Validation Stricte des Mots de Passe
-
-```csharp
-// Validators/UserDtoValidator.cs
-RuleFor(x => x.Password)
-    .NotEmpty().WithMessage("Password required")
-    .MinimumLength(12).WithMessage("Minimum 12 characters") // ⚠️ Augmenté !
-    .Matches("[A-Z]").WithMessage("At least one uppercase")
-    .Matches("[a-z]").WithMessage("At least one lowercase")
-    .Matches("[0-9]").WithMessage("At least one digit")
-    .Matches("[^a-zA-Z0-9]").WithMessage("At least one special character")
-    .Must(password => !CommonPasswords.Contains(password))
-        .WithMessage("Password is too common");
-
-// Liste de mots de passe communs à blacklist
-private static readonly HashSet<string> CommonPasswords = new()
-{
-    "Password123!",
-    "Welcome123!",
-    "Admin@123",
-    // ... ajouter plus
-};
-```
-
-### 5. Détection d'Activité Suspecte
-
-```csharp
-// Add to AuthService
-private async Task<bool> IsLoginSuspiciousAsync(User user, string ipAddress)
-{
-    // Vérifier dernier login
-    var lastLogin = await _context.AuditLogs
-        .Where(a => a.UserId == user.Id && a.Action == "Login" && a.Success)
-        .OrderByDescending(a => a.Timestamp)
-        .FirstOrDefaultAsync();
-
-    if (lastLogin is not null)
-    {
-        // Login depuis nouveau pays/IP ?
-        if (lastLogin.IpAddress != ipAddress)
-        {
-            // Envoyer email d'alerte
-            await _emailService.SendSuspiciousLoginAlertAsync(
-                user.Email,
-                user.Username,
-                ipAddress,
-                lastLogin.IpAddress
-            );
-        }
-
-        // Login trop rapide ?
-        var timeSinceLastLogin = DateTime.UtcNow - lastLogin.Timestamp;
-        if (timeSinceLastLogin.TotalMinutes < 2)
-        {
-            // Potentiellement suspect
-            return true;
-        }
-    }
-
-    return false;
-}
-```
-
----
-
-## 📈 Monitoring et Statistiques
-
-### Dashboard Admin - Exemples de Queries
-
-```csharp
-// GET: api/admin/stats/overview
-[Authorize(Roles = "Admin")]
-[HttpGet("stats/overview")]
-public async Task<IActionResult> GetOverview()
-{
-    var stats = new
-    {
-        TotalUsers = await _context.Users.CountAsync(),
-        ActiveUsers = await _context.Users.CountAsync(u => u.IsActive),
-        VerifiedUsers = await _context.Users.CountAsync(u => u.EmailVerified),
-        TotalLogins24h = await _context.AuditLogs
-            .CountAsync(a => a.Action == "Login" && 
-                           a.Timestamp > DateTime.UtcNow.AddDays(-1)),
-        FailedLogins24h = await _context.AuditLogs
-            .CountAsync(a => a.Action == "Login" && 
-                           !a.Success && 
-                           a.Timestamp > DateTime.UtcNow.AddDays(-1)),
-        ActiveRefreshTokens = await _context.RefreshTokens
-            .CountAsync(rt => rt.IsActive)
-    };
-
-    return Ok(stats);
-}
-
-// GET: api/admin/stats/login-history
-[Authorize(Roles = "Admin")]
-[HttpGet("stats/login-history")]
-public async Task<IActionResult> GetLoginHistory([FromQuery] int days = 7)
-{
-    var startDate = DateTime.UtcNow.AddDays(-days);
-    
-    var loginHistory = await _context.AuditLogs
-        .Where(a => a.Action == "Login" && a.Timestamp > startDate)
-        .GroupBy(a => a.Timestamp.Date)
-        .Select(g => new
-        {
-            Date = g.Key,
-            SuccessfulLogins = g.Count(a => a.Success),
-            FailedLogins = g.Count(a => !a.Success)
-        })
-        .OrderBy(x => x.Date)
-        .ToListAsync();
-
-    return Ok(loginHistory);
-}
-```
-
----
-
-## ✅ Checklist Finale de Déploiement
-
-### Avant Production
-
-- [ ] **Changer la clé JWT** dans `appsettings.json` (minimum 64 caractères)
-- [ ] **Activer HTTPS** uniquement
-- [ ] **Configurer email SMTP** (Gmail App Password ou service professionnel)
-- [ ] **Augmenter durée Access Token** si nécessaire (15-30 min recommandé)
-- [ ] **Tester tous les endpoints** avec Postman/Thunder Client
-- [ ] **Vérifier Rate Limiting** fonctionne
-- [ ] **Tester Email Verification** end-to-end
-- [ ] **Tester Password Reset** end-to-end
-- [ ] **Vérifier Audit Logs** s'enregistrent correctement
-- [ ] **Tester Refresh Token Rotation** fonctionne
-- [ ] **Configurer CORS** pour domaines production
-- [ ] **Ajouter logging** (Serilog recommandé)
-- [ ] **Backup database** régulièrement
-- [ ] **Monitorer failed login attempts** quotidiennement
-
-### Variables d'Environnement (Production)
-
-```bash
-# Ne JAMAIS commit ces valeurs !
-ASPNETCORE_ENVIRONMENT=Production
-ConnectionStrings__DefaultConnection="Server=prod-server;..."
-AppSettings__Token="SUPER_LONG_RANDOM_SECRET_KEY_64_CHARS_MIN"
-EmailSettings__Password="YOUR_EMAIL_APP_PASSWORD"
-```
-
-### appsettings.Production.json
-
-```json
-{
-  "ConnectionStrings": {
-    "DefaultConnection": "USE_ENVIRONMENT_VARIABLE"
-  },
-  "AppSettings": {
-    "Token": "USE_ENVIRONMENT_VARIABLE",
-    "Issuer": "YourAppName",
-    "Audience": "YourAppAudience",
-    "AccessTokenExpirationMinutes": 30,
-    "RefreshTokenExpirationDays": 7
-  },
-  "Logging": {
-    "LogLevel": {
-      "Default": "Warning",
-      "Microsoft.AspNetCore": "Warning"
-    }
-  }
-}
-```
-
----
-
-## 🎓 Ressources Supplémentaires
-
-### Documentation Officielle
-- [ASP.NET Core Security](https://learn.microsoft.com/en-us/aspnet/core/security/)
-- [JWT Authentication](https://jwt.io/introduction)
-- [OWASP Top 10](https://owasp.org/www-project-top-ten/)
-
-### Packages Recommandés
-- **Serilog** - Logging avancé
-- **AutoMapper** - Mapping DTO ↔ Entity
-- **MediatR** - Pattern CQRS (optionnel)
-- **Swashbuckle** - Documentation Swagger alternative
-
-### Outils de Test
-- **Postman** - Test API
-- **Thunder Client** (VS Code) - Alternative légère
-- **Scalar** - Documentation interactive (déjà inclus)
-
----
-
-**Last Updated:** October 2024 | **Framework:** .NET 9.0 | **EF Core:** 9.0.9
-
----
-
-## 🎉 Félicitations !
-
-Tu as maintenant une API ASP.NET Core complète avec :
-- ✅ CRUD basique
-- ✅ JWT Authentication sécurisé
-- ✅ Email verification
-- ✅ Password reset
-- ✅ Refresh token rotation
-- ✅ Audit logs complets
-- ✅ Rate limiting
-- ✅ Account lockout
-- ✅ Ready pour 2FA
-
-**Prochaines étapes :**
-1. Implémenter 2FA (guide fourni)
-2. Ajouter social login (Google, Facebook)
-3. Créer dashboard admin pour monitoring
-4. Déployer en production (Azure, AWS, etc.)
-
-Bon courage avec ton projet ! 🚀💪
+### Entité User (Déjà ajouté)
 ```csharp
 public bool TwoFactorEnabled { get; set; } = false;
 public string? TwoFactorSecret { get; set; }
@@ -2464,3 +1928,381 @@ dotnet add package QRCoder
 ```
 
 ### Entité User (Déjà ajouté)
+```csharp
+public bool TwoFactorEnabled { get; set; } = false;
+public string? TwoFactorSecret { get; set; }
+```
+
+### Service 2FA
+```csharp
+// Add to IAuthService
+Task<string> Enable2FAAsync(Guid userId);
+Task<bool> Verify2FAAsync(Guid userId, string code);
+Task<bool> Disable2FAAsync(Guid userId, string code);
+
+// Implementation in AuthService
+public async Task<string> Enable2FAAsync(Guid userId)
+{
+    var user = await _context.Users.FindAsync(userId);
+    if (user is null) throw new Exception("User not found");
+
+    var secret = OtpNet.KeyGeneration.GenerateRandomKey(20);
+    var base32Secret = OtpNet.Base32Encoding.ToString(secret);
+    
+    user.TwoFactorSecret = base32Secret;
+    user.TwoFactorEnabled = false; // Will be enabled after verification
+    
+    await _context.SaveChangesAsync();
+
+    // Generate QR code URL
+    var appName = "YourAppName";
+    var qrCodeUrl = $"otpauth://totp/{appName}:{user.Email}?secret={base32Secret}&issuer={appName}";
+    
+    return qrCodeUrl;
+}
+
+public async Task<bool> Verify2FAAsync(Guid userId, string code)
+{
+    var user = await _context.Users.FindAsync(userId);
+    if (user is null || string.IsNullOrEmpty(user.TwoFactorSecret))
+    {
+        return false;
+    }
+
+    var secretBytes = OtpNet.Base32Encoding.ToBytes(user.TwoFactorSecret);
+    var totp = new OtpNet.Totp(secretBytes);
+    
+    if (totp.VerifyTotp(code, out _, new VerificationWindow(2, 2)))
+    {
+        user.TwoFactorEnabled = true;
+        await _context.SaveChangesAsync();
+        return true;
+    }
+
+    return false;
+}
+```
+
+---
+
+## 📊 Utilisation des Audit Logs
+
+### Requêtes Utiles
+
+```csharp
+// Voir toutes les actions d'un utilisateur
+[Authorize]
+[HttpGet("audit-logs/me")]
+public async Task<ActionResult<List<AuditLog>>> GetMyAuditLogs()
+{
+    var userId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
+    
+    var logs = await _context.AuditLogs
+        .Where(a => a.UserId == userId)
+        .OrderByDescending(a => a.Timestamp)
+        .Take(50)
+        .ToListAsync();
+    
+    return Ok(logs);
+}
+
+// Voir les tentatives de connexion échouées (Admin)
+[Authorize(Roles = "Admin")]
+[HttpGet("audit-logs/failed-logins")]
+public async Task<ActionResult<List<AuditLog>>> GetFailedLogins()
+{
+    var logs = await _context.AuditLogs
+        .Where(a => a.Action == "Login" && !a.Success)
+        .OrderByDescending(a => a.Timestamp)
+        .Take(100)
+        .ToListAsync();
+    
+    return Ok(logs);
+}
+
+// Voir les connexions par IP suspecte
+[Authorize(Roles = "Admin")]
+[HttpGet("audit-logs/suspicious-ips")]
+public async Task<ActionResult> GetSuspiciousIPs()
+{
+    var suspiciousIPs = await _context.AuditLogs
+        .Where(a => !a.Success)
+        .GroupBy(a => a.IpAddress)
+        .Where(g => g.Count() > 10)
+        .Select(g => new
+        {
+            IpAddress = g.Key,
+            FailedAttempts = g.Count(),
+            LastAttempt = g.Max(a => a.Timestamp)
+        })
+        .ToListAsync();
+    
+    return Ok(suspiciousIPs);
+}
+```
+
+---
+
+## 🔄 Refresh Token Rotation - Comment ça marche ?
+
+### Principe
+1. **Client** envoie Refresh Token
+2. **API** vérifie le token
+3. **API** révoque l'ancien token
+4. **API** génère NOUVEAU Access Token + NOUVEAU Refresh Token
+5. **API** lie l'ancien token au nouveau (pour audit)
+6. **Client** reçoit les nouveaux tokens
+
+### Avantages
+- ✅ Si un Refresh Token est volé, il devient invalide dès la prochaine rotation
+- ✅ Traçabilité complète dans la table `RefreshTokens`
+- ✅ Détection des tokens compromis (si ancien token utilisé après rotation)
+
+### Détection de Token Compromis
+```csharp
+// Add to AuthService
+private async Task<bool> IsTokenCompromisedAsync(string token)
+{
+    var refreshToken = await _context.RefreshTokens
+        .FirstOrDefaultAsync(rt => rt.Token == token);
+
+    // Si le token a été révoqué ET a un replacedByToken, c'est suspect
+    if (refreshToken is not null && 
+        refreshToken.IsRevoked && 
+        !string.IsNullOrEmpty(refreshToken.ReplacedByToken))
+    {
+        // Quelqu'un essaie d'utiliser un ancien token
+        // Action: Révoquer TOUTE la chaîne de tokens
+        await RevokeDescendantRefreshTokensAsync(refreshToken);
+        return true;
+    }
+
+    return false;
+}
+
+private async Task RevokeDescendantRefreshTokensAsync(RefreshTokenEntity refreshToken)
+{
+    // Révoquer récursivement tous les tokens descendants
+    if (!string.IsNullOrEmpty(refreshToken.ReplacedByToken))
+    {
+        var childToken = await _context.RefreshTokens
+            .FirstOrDefaultAsync(rt => rt.Token == refreshToken.ReplacedByToken);
+        
+        if (childToken is not null && childToken.IsActive)
+        {
+            childToken.IsRevoked = true;
+            childToken.RevokedAt = DateTime.UtcNow;
+            await RevokeDescendantRefreshTokensAsync(childToken);
+        }
+    }
+    
+    await _context.SaveChangesAsync();
+}
+```
+
+---
+
+## 🧪 Tests API - Exemples Complets
+
+### test-auth.http
+```http
+@baseUrl = https://localhost:7020
+@accessToken = YOUR_ACCESS_TOKEN
+@refreshToken = YOUR_REFRESH_TOKEN
+@userId = YOUR_USER_ID
+@emailVerificationToken = YOUR_EMAIL_TOKEN
+@passwordResetToken = YOUR_RESET_TOKEN
+
+### 1. Health Check
+GET {{baseUrl}}/health
+
+### 2. Register
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "username": "testuser",
+  "email": "test@example.com",
+  "password": "Test@1234"
+}
+
+### 3. Verify Email
+GET {{baseUrl}}/api/auth/verify-email?token={{emailVerificationToken}}
+
+### 4. Login
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "testuser",
+  "password": "Test@1234",
+  "rememberMe": false
+}
+
+### 5. Login with Remember Me
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "testuser",
+  "password": "Test@1234",
+  "rememberMe": true
+}
+
+### 6. Access Protected Endpoint
+GET {{baseUrl}}/api/auth
+Authorization: Bearer {{accessToken}}
+
+### 7. Refresh Tokens
+POST {{baseUrl}}/api/auth/refresh-tokens
+Content-Type: application/json
+
+{
+  "userId": "{{userId}}",
+  "refreshToken": "{{refreshToken}}"
+}
+
+### 8. Request Password Reset
+POST {{baseUrl}}/api/auth/request-password-reset
+Content-Type: application/json
+
+{
+  "email": "test@example.com"
+}
+
+### 9. Reset Password
+POST {{baseUrl}}/api/auth/reset-password
+Content-Type: application/json
+
+{
+  "token": "{{passwordResetToken}}",
+  "newPassword": "NewPassword@123"
+}
+
+### 10. Logout
+POST {{baseUrl}}/api/auth/logout
+Authorization: Bearer {{accessToken}}
+
+### 11. Revoke Token
+POST {{baseUrl}}/api/auth/revoke-token
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "token": "{{refreshToken}}"
+}
+
+### 12. Admin Only Endpoint
+GET {{baseUrl}}/api/auth/admin-only
+Authorization: Bearer {{accessToken}}
+
+### 13. Test Rate Limiting (Try 6 times quickly)
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "testuser",
+  "password": "WrongPassword123!"
+}
+```
+
+---
+
+## 🎯 Migration Commands
+
+```bash
+# Create migration for User, AuditLog, RefreshToken
+dotnet ef migrations add AddAuthEntities
+
+# Apply migration
+dotnet ef database update
+
+# If you need to add 2FA later
+dotnet ef migrations add Add2FASupport
+dotnet ef database update
+```
+
+---
+
+## 📋 Checklist Finale d'Implémentation
+
+### Étapes à Suivre
+
+- [ ] 1. Installer tous les packages NuGet requis
+- [ ] 2. Créer les entités (User, AuditLog, RefreshTokenEntity)
+- [ ] 3. Créer le DbContext avec les DbSets
+- [ ] 4. Configurer appsettings.json
+- [ ] 5. Créer les Models/DTOs
+- [ ] 6. Créer les Validators (FluentValidation)
+- [ ] 7. Implémenter IEmailService et EmailService
+- [ ] 8. Implémenter IAuthService et AuthService
+- [ ] 9. Créer AuthController
+- [ ] 10. Configurer Program.cs (JWT, CORS, Rate Limiting, etc.)
+- [ ] 11. Créer et appliquer les migrations
+- [ ] 12. Tester avec le fichier .http
+- [ ] 13. Vérifier les logs d'audit dans la BD
+- [ ] 14. Tester le rate limiting
+- [ ] 15. Configurer le service email (Gmail App Password)
+
+---
+
+## 🔐 Configuration Gmail pour l'Email
+
+### Étapes pour obtenir un App Password Gmail
+
+1. Aller sur [Google Account](https://myaccount.google.com/)
+2. Sécurité → Validation en deux étapes (activer si pas déjà fait)
+3. Mots de passe des applications
+4. Sélectionner "Application" → Autre → "YourAppName"
+5. Copier le mot de passe généré (16 caractères)
+6. Mettre dans appsettings.json :
+
+```json
+"EmailSettings": {
+  "SmtpServer": "smtp.gmail.com",
+  "SmtpPort": 587,
+  "SenderEmail": "your-email@gmail.com",
+  "SenderName": "Your App",
+  "Username": "your-email@gmail.com",
+  "Password": "xxxx xxxx xxxx xxxx"  // App password
+}
+```
+
+---
+
+## 🚀 Prochaines Étapes (Fonctionnalités Avancées)
+
+### 1. Implémenter 2FA (Two-Factor Authentication)
+- Package : `OtpNet`, `QRCoder`
+- Endpoints : `/enable-2fa`, `/verify-2fa`, `/disable-2fa`
+
+### 2. Social Login (Google, Facebook)
+- Package : `Microsoft.AspNetCore.Authentication.Google`
+- Configuration OAuth
+
+### 3. Device Management
+- Table `UserDevices` avec fingerprint du navigateur
+- Notification lors de connexion depuis nouvel appareil
+
+### 4. IP Whitelist/Blacklist
+- Table `AllowedIPs` et `BlockedIPs`
+- Middleware de vérification IP
+
+### 5. Session Management
+- Voir tous les appareils connectés
+- Déconnecter des appareils spécifiques
+
+---
+
+## 📚 Ressources Utiles
+
+- [JWT.io](https://jwt.io/) - Décoder et vérifier les JWT
+- [OWASP Authentication Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html)
+- [Microsoft Identity Documentation](https://learn.microsoft.com/en-us/aspnet/core/security/)
+- [FluentValidation Docs](https://docs.fluentvalidation.net/)
+
+---
+
+**Last Updated:** October 2024 | **Framework:** .NET 9.0 | **EF Core:** 9.0.9
+
+**✨ Félicitations ! Tu as maintenant une API ASP.NET Core complète avec authentification JWT et toutes les fonctionnalités de sécurité modernes !** 🎉
